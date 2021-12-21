@@ -19,6 +19,7 @@ bin
 devcontainer.json
 lucidao.code-workspace
 *.orig
+fix-test-atomic-execution.patch
 
 #Lucid Dao
 anonymized-contracts

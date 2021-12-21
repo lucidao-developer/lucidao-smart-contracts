@@ -14,7 +14,7 @@ async function main() {
 
     let whitelisted = await GetWhitelistedAddresses();
     const [lucidPreSale, lucidPublicSale] = await deploySaleContracts(luciDao, luciDaoGovernanceReserve, fUsdt, whitelisted);
-    await addToPublicSaleWhitelist(lucidPublicSale, whitelisted);
+    //await addToPublicSaleWhitelist(lucidPublicSale, whitelisted);
 }
 
 main()
