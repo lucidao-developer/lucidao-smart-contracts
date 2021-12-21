@@ -31,7 +31,7 @@ async function main() {
 
     // DEPLOY PRESALE AND PUBLICSALE
     const [luciDaoPreSale, luciDaoPublicSale] = await deploySaleContracts(luciDao, luciDaoGovernanceReserve, fUsdt, whitelisted);
-    await addToPublicSaleWhitelist(luciDaoPublicSale, whitelisted);
+    // await addToPublicSaleWhitelist(luciDaoPublicSale, whitelisted);
 
     await transferLuciDaoToLiquidityVault(luciDao, liquidityVaultAddress);
 }
