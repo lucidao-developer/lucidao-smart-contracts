@@ -20,7 +20,7 @@ async function copyRecursiveSync(src: string, dest: string) {
 
 function replaceContractPrefixInFile(destFilename: string) {
     const data = fs.readFileSync(destFilename, { encoding: 'utf8' });
-    let result = data.replace(/LuciDao/g, newPrefix);
+    let result = data.replace(/Lucidao/g, newPrefix);
     result = result.replace(/LCD/g, newTokenPrefix);
     fs.writeFileSync(destFilename, result, { encoding: 'utf8' });
 }
