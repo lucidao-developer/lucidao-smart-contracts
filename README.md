@@ -1,6 +1,6 @@
 # Lucidao
 
-Collection of smart contracts, scripts and tests for the management of the Lucid Dao platform.
+Collection of smart contracts, scripts and tests for the management of the Lucidao platform.
 
 ---
 
@@ -9,7 +9,7 @@ Collection of smart contracts, scripts and tests for the management of the Lucid
 The repository uses Docker Compose.
 Prior to conducting any action, you must start the **contracts-env container**.
 
-Follow the instructions to setup the repository for testing or deploying the Lucid Dao contracts:
+Follow the instructions to setup the repository for testing or deploying the Lucidao contracts:
 
 - Install docker and docker-compose:
 
