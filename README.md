@@ -1,4 +1,4 @@
-# Lucid Dao
+# Lucidao
 
 Collection of smart contracts, scripts and tests for the management of the Lucid Dao platform.
 
