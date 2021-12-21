@@ -1,0 +1,25 @@
+node_modules
+.env
+.env.development
+.env.production
+coverage
+coverage.json
+typechain
+.openzeppelin
+tests.txt
+
+#Hardhat files
+cache
+artifacts
+bin
+
+#VsCode
+.history
+.devcontainer
+devcontainer.json
+lucidao.code-workspace
+*.orig
+
+#Lucid Dao
+anonymized-contracts
+anonymized-scripts

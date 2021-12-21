@@ -1,0 +1,22 @@
+version: '3.4'
+
+services:
+  lucidaosmartcontracts:
+    image: lucidaosmartcontracts
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+    volumes:
+      - ../:/usr/src/app/
+      - lsc_node_modules:/usr/src/app/node_modules
+      - lsc_vscodeserver:/home/node/.vscode-server
+    ports:
+      - 8545:8545
+      - 9229:9229
+    command: ["bash", "/usr/src/app/docker/script/entrypoint.sh"]
+
+volumes:
+  lsc_node_modules:
+  lsc_vscodeserver:
