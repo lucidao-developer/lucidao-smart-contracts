@@ -14,13 +14,13 @@ export async function voteProposal(governor: LucidaoGovernor, targets: string[],
     const txReceipt = await tx.wait();
     const proposalId = (txReceipt.events![0].args!["proposalId"]).toString();
     const votingDelay = await governor.votingDelay();
-    for (let index = 0; index < votingDelay.toNumber(); index++) {
+    for (let index = 0; index <= votingDelay.toNumber(); index++) {
         await network.provider.send("evm_mine");
     }
     await governor.castVote(proposalId, vote);
     const proposalDeadline = await governor.proposalDeadline(proposalId);
     const currentBlock = await ethers.provider.getBlockNumber();
-    for (let index = currentBlock; index < proposalDeadline.toNumber(); index++) {
+    for (let index = currentBlock; index <= proposalDeadline.toNumber(); index++) {
         await network.provider.send("evm_mine");
     }
 

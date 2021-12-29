@@ -53,7 +53,7 @@ export function governanceProposalsBehavior(): void {
     it("should not allow to vote for a closed proposal", async function () {
         const votingDelay = await this.luciDaoGovernor.proposalDeadline(this.proposalId);
         const currentBlock = await ethers.provider.getBlockNumber();
-        for (let index = currentBlock; index < votingDelay.toNumber(); index++) {
+        for (let index = currentBlock; index <= votingDelay.toNumber(); index++) {
             await network.provider.send("evm_mine");
         }
         expect(await this.luciDaoGovernor.state(this.proposalId)).to.eq(ProposalState.Succeeded);
@@ -124,7 +124,7 @@ export function governanceProposalsBehavior(): void {
         const proposalId = (txReceipt.events![0].args!["proposalId"]).toString();
 
         const votingDelay = await this.luciDaoGovernor.votingDelay();
-        for (let index = 0; index < votingDelay.toNumber(); index++) {
+        for (let index = 0; index <= votingDelay.toNumber(); index++) {
             await network.provider.send("evm_mine");
         }
 
@@ -132,11 +132,9 @@ export function governanceProposalsBehavior(): void {
         await this.luciDaoGovernor.connect(this.white3).castVote(proposalId, Votes.For);
 
         const votes = await this.luciDaoGovernor.proposalVotes(proposalId);
-        console.log(votes.againstVotes.toString());
-        console.log(votes.forVotes.toString());
         const proposalDeadline = await this.luciDaoGovernor.proposalDeadline(proposalId);
         const currentBlock = await ethers.provider.getBlockNumber();
-        for (let index = currentBlock; index < proposalDeadline.toNumber(); index++) {
+        for (let index = currentBlock; index <= proposalDeadline.toNumber(); index++) {
             await network.provider.send("evm_mine");
         }
 
