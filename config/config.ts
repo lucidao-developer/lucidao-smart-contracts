@@ -58,7 +58,7 @@ export const releaseTime = 1673704800;
 
 let preSaleRate = "135";
 let publicSaleRate = "83";
-let preSaleStartTime = 1640786400;
+let preSaleStartTime = 1640784000;
 let publicSaleStartTime = 1641391200;
 let closingTime = 1642168800;
 let usdForLiquidityTmp = "528000";
