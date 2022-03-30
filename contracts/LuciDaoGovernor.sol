@@ -2,26 +2,30 @@
 
 pragma solidity ^0.8.9;
 
-import "@openzeppelin/contracts-upgradeable/governance/GovernorUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorProposalThresholdUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorSettingsUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorCountingSimpleUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorVotesUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorVotesQuorumFractionUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/governance/extensions/GovernorTimelockControlUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract LucidaoGovernor is
-	Initializable,
-	GovernorUpgradeable,
-	GovernorProposalThresholdUpgradeable,
+	GovernorSettingsUpgradeable,
 	GovernorCountingSimpleUpgradeable,
 	GovernorVotesUpgradeable,
 	GovernorVotesQuorumFractionUpgradeable,
 	GovernorTimelockControlUpgradeable
 {
-	function initialize(ERC20VotesUpgradeable _token, TimelockControllerUpgradeable _timelock) public initializer {
+	/// @custom:oz-upgrades-unsafe-allow constructor
+	constructor() initializer {}
+
+	function initialize(IVotesUpgradeable _token, TimelockControllerUpgradeable _timelock) public initializer {
 		__Governor_init("LucidaoGovernor");
-		__GovernorProposalThreshold_init();
+		// 2.34s block time
+		__GovernorSettings_init(
+			19726, /* 12 hours */
+			118356, /* 3 days */
+			8800000e18
+		);
 		__GovernorCountingSimple_init();
 		__GovernorVotes_init(_token);
 		// 4% quorum
@@ -29,26 +33,18 @@ contract LucidaoGovernor is
 		__GovernorTimelockControl_init(_timelock);
 	}
 
-	function votingDelay() public pure override returns (uint256) {
-		return 50233; // on average 12 hours on Fantom with a block time of 0.86s
-	}
-
-	function votingPeriod() public pure override returns (uint256) {
-		return 301398; // on average 3 days
-	}
-
-	function proposalThreshold() public pure override returns (uint256) {
-		return 8800000e18;
-	}
-
 	// The following functions are overrides required by Solidity.
+
+	function votingDelay() public view override(IGovernorUpgradeable, GovernorSettingsUpgradeable) returns (uint256) {
+		return super.votingDelay();
+	}
+
+	function votingPeriod() public view override(IGovernorUpgradeable, GovernorSettingsUpgradeable) returns (uint256) {
+		return super.votingPeriod();
+	}
 
 	function quorum(uint256 blockNumber) public view override(IGovernorUpgradeable, GovernorVotesQuorumFractionUpgradeable) returns (uint256) {
 		return super.quorum(blockNumber);
-	}
-
-	function getVotes(address account, uint256 blockNumber) public view override(IGovernorUpgradeable, GovernorVotesUpgradeable) returns (uint256) {
-		return super.getVotes(account, blockNumber);
 	}
 
 	function state(uint256 proposalId) public view override(GovernorUpgradeable, GovernorTimelockControlUpgradeable) returns (ProposalState) {
@@ -60,8 +56,12 @@ contract LucidaoGovernor is
 		uint256[] memory values,
 		bytes[] memory calldatas,
 		string memory description
-	) public override(GovernorUpgradeable, GovernorProposalThresholdUpgradeable, IGovernorUpgradeable) returns (uint256) {
+	) public override(GovernorUpgradeable, IGovernorUpgradeable) returns (uint256) {
 		return super.propose(targets, values, calldatas, description);
+	}
+
+	function proposalThreshold() public view override(GovernorUpgradeable, GovernorSettingsUpgradeable) returns (uint256) {
+		return super.proposalThreshold();
 	}
 
 	function _execute(

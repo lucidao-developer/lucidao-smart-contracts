@@ -1,39 +1,57 @@
+import yesno from 'yesno';
 import { ethers } from "hardhat";
-import { GetLiquidityVaultAddress, GetWhitelistedAddresses } from "../config/config";
-import { deployLuciDao, deployLuciDaoGovernanceReserve, deployProxiedGovernance, deploySaleContracts, deployLuciDaoTimelock, deployLuciDaoVestingTreasury, transferLuciDaoToLiquidityVault, getOrDeployfUsdt, addToPublicSaleWhitelist } from "./deployFunctions";
+import {
+    getOrDeployLuciDao, getOrDeployLuciDaoGovernanceReserve,
+    getOrDeployProxiedGovernance, getOrDeployLuciDaoTimelock,
+    getOrDeployLuciDaoVestingTreasury,
+    getOrDeployLuciDaoVisionProposals,
+    renounceTimelockAdminRole
+} from "./deployFunctions";
 
 async function main() {
     const [deployer] = await ethers.getSigners();
-    const liquidityVaultAddress = await GetLiquidityVaultAddress();
+    // const FEE_DATA = {
+    //     maxFeePerGas:         ethers.utils.parseUnits('700', 'gwei'),
+    //     maxPriorityFeePerGas: ethers.utils.parseUnits('205',   'gwei'),
+    //     gasPrice: null
+    // };
+    // provider.getFeeData = async () => FEE_DATA;
+    // FIXME: Standardaze gas fee management using a fallback provider
+
+    // TODO: take in input a snapshot json and define lcd quantities to distribute
 
     console.log(`Deploying contracts with the account: ${deployer.address} on Network: ${process.env.HARDHAT_NETWORK}`);
     console.log(`Account balance: ${(await deployer.getBalance()).toString()}`);
-
-    const whitelisted = await GetWhitelistedAddresses();
+    const ok = await yesno({
+        question: `* "Proseguire?"`
+    });
+    if (!ok) {
+        process.exit(1);
+    }
 
     // DEPLOY LUCID TOKEN
-    const luciDao = await deployLuciDao();
-
-    // DEPLOY fUSDT TOKEN
-    const fUsdt = await getOrDeployfUsdt(deployer, whitelisted);
+    const luciDao = await getOrDeployLuciDao();
 
     // DEPLOY TIMELOCK GOVERNANCE
-    const luciDaoTimelock = await deployLuciDaoTimelock();
+    const luciDaoTimelock = await getOrDeployLuciDaoTimelock();
 
     // DEPLOY PROXIED GOVERNANCE
-    const luciDaoGovernor = await deployProxiedGovernance(deployer, luciDao, luciDaoTimelock);
+    const luciDaoGovernor = await getOrDeployProxiedGovernance(deployer, luciDao, luciDaoTimelock);
 
     // DEPLOY LUCID DAO VAULT
-    const luciDaoGovernanceReserve = await deployLuciDaoGovernanceReserve(liquidityVaultAddress, luciDao, fUsdt, luciDaoTimelock);
+    const luciDaoGovernanceReserve = await getOrDeployLuciDaoGovernanceReserve(luciDao, luciDaoTimelock);
+
+    // DEPLOY LUCID VISION PROPOSALS
+    const luciDaoVisionProposals = await getOrDeployLuciDaoVisionProposals(luciDaoTimelock);
 
     // DEPLOY LUCID VESTING VAULT
-    const luciDaoVestingTreasury = await deployLuciDaoVestingTreasury(luciDao, luciDaoGovernanceReserve);
+    const luciDaoVestingTreasury = await getOrDeployLuciDaoVestingTreasury(luciDao, luciDaoGovernanceReserve);
 
-    // DEPLOY PRESALE AND PUBLICSALE
-    const [luciDaoPreSale, luciDaoPublicSale] = await deploySaleContracts(luciDao, luciDaoGovernanceReserve, fUsdt, whitelisted);
-    // await addToPublicSaleWhitelist(luciDaoPublicSale, whitelisted);
+    await renounceTimelockAdminRole(deployer, luciDaoTimelock);
 
-    await transferLuciDaoToLiquidityVault(luciDao, liquidityVaultAddress);
+    // TODO: script finalize migration?
+    // await (await luciDaoGovernanceReserve.transferOwnership(luciDaoTimelock.address)).wait();
+    // console.log(`${contractName} ownership given to timelock of governance ${luciDaoTimelock.address}`);
 }
 
 main()

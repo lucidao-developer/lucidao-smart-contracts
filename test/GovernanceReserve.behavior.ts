@@ -1,36 +1,82 @@
 import { expect } from 'chai';
-import { ethers } from 'ethers';
-
-import { GetLiquidityVaultAddress, usdtForLiquidity } from '../config/config';
+import { ethers, waffle } from 'hardhat';
+import { lcdAllocations } from '../config/config';
+import { transferLuciDaoTo, transferOwnershipForGovernanceReserve } from '../scripts/deployFunctions';
+import { checkSkipTest } from './Utilities';
 
 export function luciDaoGovernanceReserveBehavior(): void {
-  const parsedUsdtForLiquidity = ethers.utils.parseUnits(usdtForLiquidity, 6);
-
   it("should have expected init parameters", async function () {
-    const liquidityVaultAddress = await GetLiquidityVaultAddress();
-    expect(await this.luciDaoGovernanceReserve.liquidityVault()).to.eq(liquidityVaultAddress);
-    expect(await this.luciDaoGovernanceReserve.amountForLiquidity()).to.eq(+usdtForLiquidity);
-    expect(await this.luciDaoGovernanceReserve.canWithdrawForLiquidity()).to.eq(true);
+    checkSkipTest(this.skipTest, this);
     expect(await this.luciDaoGovernanceReserve.owner()).to.eq(this.luciDaoTimelock.address);
   });
 
-  it("should repeat function only if transaction fails & should withdraw to liquidity vault only once", async function () {
-    const liquidityVaultAddress = await GetLiquidityVaultAddress();
+  it("Governance reserve can receive native token", async function () {
+    checkSkipTest(this.skipTest, this);
+    const provider = waffle.provider;
+    const nativeTokenAmount = "100";
+    const parsedEthAmount = ethers.utils.parseEther(nativeTokenAmount);
 
-    let liquidityVaultAccount = {
-      getAddress: function(){
-        return liquidityVaultAddress;
-      }
-    }
-    //const isLoggedInStub = sinon.stub(account, "getAddress").returns(liquidityVaultAddress);
+    const governanceReserveBalance = await provider.getBalance(this.luciDaoGovernanceReserve.address);
 
-    await expect(this.luciDaoGovernanceReserve.withdrawForLiquidity()).to.be.revertedWith("ERC20: transfer amount exceeds balance");
-    await this.fUsdt.mint(this.luciDaoGovernanceReserve.address, parsedUsdtForLiquidity);
-    // FIXME: changeTokenBalances accepts Wallets or Signers, we have a string as the second parameter
-    await expect(() => this.luciDaoGovernanceReserve.connect(this.addr1).withdrawForLiquidity())
-      .to.changeTokenBalances(this.fUsdt, [this.luciDaoGovernanceReserve, liquidityVaultAccount],
-        [-parsedUsdtForLiquidity, parsedUsdtForLiquidity]);
-    await expect(this.luciDaoGovernanceReserve.withdrawForLiquidity()).to.be.revertedWith("Function already executed");
+    const owner1InitialBalance = await provider.getBalance(this.addr1.address);
+    const tx = await (await this.addr1.sendTransaction({
+      to: this.luciDaoGovernanceReserve.address,
+      value: parsedEthAmount
+    })).wait();
+
+    const newOwner1InitialBalance = await provider.getBalance(this.addr1.address);
+
+    expect(newOwner1InitialBalance).to.be.eq(owner1InitialBalance
+      .sub(parsedEthAmount)
+      .sub(tx.gasUsed.mul(tx.effectiveGasPrice)));
+
+    const newGovernanceReserveBalance = await provider.getBalance(this.luciDaoGovernanceReserve.address);
+
+    expect(newGovernanceReserveBalance).to.be.eq(governanceReserveBalance
+      .add(parsedEthAmount));
   });
 
+  it("after redeploy should have correct owner", async function () {
+    checkSkipTest(this.skipTest, this);
+    const LuciDaoGovernanceReserve = await ethers.getContractFactory("LucidaoGovernanceReserve");
+    const myLuciDaoGovernanceReserve = await LuciDaoGovernanceReserve.deploy();
+    await myLuciDaoGovernanceReserve.deployed();
+
+    const LuciDao = await ethers.getContractFactory("Lucidao");
+    const myLuciDaoToken = await LuciDao.deploy();
+    await myLuciDaoToken.deployed();
+
+    expect(await myLuciDaoGovernanceReserve.owner())
+      .to.be.eq(this.signer.address);
+
+    // try {
+    //   await transferOwnershipForGovernanceReserve(this.signer,
+    //     myLuciDaoGovernanceReserve,
+    //     this.luciDaoToken,
+    //     this.luciDaoTimelock
+    //   )
+    //   throw new Error("non previsto");
+    // } catch (error) {
+    //   let errorMessage = "";
+    //   if (error instanceof Error) {
+    //     errorMessage = error.message;
+    //   }
+    //   expect(errorMessage.indexOf("Governance Reserve has an unexpected balance"))
+    //     .to.be.gt(-1);
+    // };
+
+    await transferLuciDaoTo(myLuciDaoToken,
+      "GovernanceReserve",
+      myLuciDaoGovernanceReserve.address,
+      lcdAllocations.governanceReserve);
+
+    await transferOwnershipForGovernanceReserve(this.signer,
+      myLuciDaoGovernanceReserve,
+      myLuciDaoToken,
+      this.luciDaoTimelock
+    );
+
+    expect(await myLuciDaoGovernanceReserve.owner())
+      .to.be.eq(this.luciDaoTimelock.address);
+  })
 }

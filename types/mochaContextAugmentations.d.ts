@@ -1,7 +1,8 @@
 import { BigNumber } from "@ethersproject/bignumber";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { BigNumberish, BytesLike } from "ethers";
-import { AnyswapV3ERC20, DummyImplementation, DummyImplementationUpgraded, Lucidao, LucidaoGovernanceReserve, LucidaoGovernor, LucidaoGovernorUpgraded, LucidaoPublicSale, LucidaoSale, LucidaoTimelock, LucidaoVestingTreasury, ProxyAdmin, TransparentUpgradeableProxy } from "../typechain";
+import { RedeployManager } from "../scripts/redeployManager";
+import { AnyswapV3ERC20, DummyImplementation, DummyImplementationUpgraded, Lucidao, LucidaoGovernanceReserve, LucidaoGovernor, LucidaoGovernorUpgraded, LucidaoTimelock, LucidaoVestingTreasury, ProxyAdmin, TransparentUpgradeableProxy } from "../typechain";
 
 export type ProposalArgs = [string[], BigNumberish[], BytesLike[]];
 
@@ -12,6 +13,7 @@ declare module "mocha" {
         zero: BigNumber;
         oneEth: BigNumber;
         negativeOneEth: BigNumber;
+        skipTest: boolean;
 
         signer: SignerWithAddress;
         addr1: SignerWithAddress;
@@ -25,11 +27,8 @@ declare module "mocha" {
         signers: SignerWithAddress[];
 
         luciDaoToken: Lucidao;
-        fUsdt: AnyswapV3ERC20;
         luciDaoTimelock: LucidaoTimelock;
         luciDaoGovernanceReserve: LucidaoGovernanceReserve;
-        luciDaoPreSale: LucidaoSale;
-        luciDaoPublicSale: LucidaoPublicSale;
         LuciDaoVestingTreasury: LucidaoVestingTreasury;
         luciDaoGovernor: LucidaoGovernor;
         proxyAdmin: ProxyAdmin;
@@ -41,6 +40,7 @@ declare module "mocha" {
         PROPOSER_ROLE: string;
         EXECUTOR_ROLE: string;
         TIMELOCK_ADMIN_ROLE: string;
+        CANCELLER_ROLE: string;
 
         approveCalldata: string;
         transferCalldata: string;
@@ -49,5 +49,14 @@ declare module "mocha" {
         proposalHash: [...ProposalArgs, BytesLike];
         proposalId: string;
         queueId: string;
+
+        redeployManager: RedeployManager;
+        airdropManagerAddress: string;
+        luciDaoGovernanceReserveAddress: string;
+        luciDaoLiquidityAddress: string;
+        luciDaoVestingTreasuryAddress: string;
+
+        redeployLiquidityLcdBalance: string;
+        redeployReserveLcdBalance: string;
     }
 }

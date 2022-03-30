@@ -5,7 +5,7 @@ import "@typechain/hardhat";
 import "@openzeppelin/hardhat-upgrades";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
-import { isDevelopment, myDotenvConfig } from "./scripts/utilities";
+import { isDevelopment, myDotenvConfig, usingAnonymizedScriptsAndContracts } from "./scripts/utilities";
 
 myDotenvConfig();
 
@@ -15,10 +15,14 @@ const chainIds = {
   bscTestnet: 97,
   bscMainnet: 56,
   ftmTestnet: 4002,
-  ftmMainnet: 250
+  ftmMainnet: 250,
+  polygonTestnet: 80001,
+  polygonMainnet: 137
 };
 
 let mnemonic: string;
+let ftmscanApiKey: string;
+let polygonscanApiKey: string;
 
 if (!process.env.MNEMONIC) {
   throw new Error("Please set your MNEMONIC in the .env file");
@@ -26,15 +30,11 @@ if (!process.env.MNEMONIC) {
   mnemonic = process.env.MNEMONIC;
 }
 
-let actualScanApiKey: string;
-
-let ftmscanApiKey: string;
-
-if (!process.env.FTMSCAN_API_KEY) {
-  throw new Error("Please set your FTMSCAN_API_KEY in the .env file");
+if (!process.env.FTMSCAN_API_KEY || !process.env.POLYGONSCAN_API_KEY) {
+  throw new Error("Please set your FTMSCAN_API_KEY or POLYGONSCAN_API_KEY in the .env file");
 } else {
   ftmscanApiKey = process.env.FTMSCAN_API_KEY;
-  actualScanApiKey = ftmscanApiKey;
+  polygonscanApiKey = process.env.POLYGONSCAN_API_KEY;
 }
 
 const config: HardhatUserConfig = {
@@ -48,6 +48,17 @@ const config: HardhatUserConfig = {
   },
   defaultNetwork: "hardhat",
   networks: {
+    localhost: {
+      accounts: {
+        mnemonic: mnemonic,
+        accountsBalance: "90000000000000000000000",
+        count: 30
+      },
+      chainId: chainIds.hardhat,
+      gas: 950000000,
+      blockGasLimit: 950000000,
+      allowUnlimitedContractSize: true
+    },
     hardhat: {
       accounts: {
         mnemonic: mnemonic,
@@ -59,15 +70,12 @@ const config: HardhatUserConfig = {
       blockGasLimit: 950000000,
       allowUnlimitedContractSize: true
     },
-    testnet: {
+    bscTestnet: {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545",
       chainId: chainIds.bscTestnet,
-      accounts: { mnemonic: mnemonic },
-      gas: "auto",
-      gasPrice: "auto",
-      gasMultiplier: 2
+      accounts: { mnemonic: mnemonic }
     },
-    mainnet: {
+    bscMainnet: {
       url: "https://bsc-dataseed.binance.org/",
       chainId: chainIds.bscMainnet,
       accounts: { mnemonic: mnemonic }
@@ -75,12 +83,24 @@ const config: HardhatUserConfig = {
     ftmTestnet: {
       url: "https://rpc.testnet.fantom.network/",
       chainId: chainIds.ftmTestnet,
-      accounts: { mnemonic: mnemonic },
+      accounts: { mnemonic: mnemonic }
     },
     ftmMainnet: {
       url: "https://rpc.ftm.tools",
       chainId: chainIds.ftmMainnet,
+      accounts: { mnemonic: mnemonic }
+    },
+    polygonTestnet: {
+      url: "https://rpc-mumbai.matic.today",
+      chainId: chainIds.polygonTestnet,
+      accounts: { mnemonic: mnemonic }
+    },
+    polygonMainnet: {
+      url: "https://polygon-mainnet.g.alchemy.com/v2/m3xtNtrx_GcL6YFbGmfuQVlwHQCBKdSc",
+      chainId: chainIds.polygonMainnet,
       accounts: { mnemonic: mnemonic },
+      gasMultiplier: 3,
+      gas: 3000000
     }
   },
   gasReporter: {
@@ -88,7 +108,12 @@ const config: HardhatUserConfig = {
     currency: "USD",
   },
   etherscan: {
-    apiKey: actualScanApiKey
+    apiKey: {
+      opera: ftmscanApiKey,
+      ftmTestnet: ftmscanApiKey,
+      polygon: polygonscanApiKey,
+      polygonMumbai: polygonscanApiKey
+    }
   }
 };
 
@@ -100,7 +125,7 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
   }
 });
 
-task("ftmscan", "validate smart contract on ftmscan", async (args, hre) => {
+task("etherscan", "validate smart contract on block explorer", async (args, hre) => {
   const [deployer] = await hre.ethers.getSigners();
   console.log(`Deploying account: ${deployer.address}`);
 
@@ -111,7 +136,7 @@ task("ftmscan", "validate smart contract on ftmscan", async (args, hre) => {
 
 if (isDevelopment()) {
   // let onMainnet = false;
-  let deployingAnonymizedContractsScript = process.env.npm_lifecycle_script?.indexOf('anonymizeDeployEverything');
+  let anonymizedScript = usingAnonymizedScriptsAndContracts();
 
   // process.argv.forEach(param => {
   //   if(param.toLowerCase().indexOf('mainnet')>-1){
@@ -119,7 +144,7 @@ if (isDevelopment()) {
   //   }
   // });
 
-  if (deployingAnonymizedContractsScript && deployingAnonymizedContractsScript > -1) {
+  if (anonymizedScript) {
     config.paths = {
       sources: "./anonymized-contracts",
     };

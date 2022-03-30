@@ -1,14 +1,16 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { Votes } from "../config/config";
-import { enactProposal } from "../test/Utilities";
+import { checkSkipTest, enactProposal } from "../test/Utilities";
 
 export function governanceNewProxyBehavior(): void {
     it("should retrieve a value previously initialized", async function () {
+        checkSkipTest(this.skipTest, this);
         expect((await this.dummyImplementation.retrieve()).toString()).to.equal("42");
     });
 
     it("should retrieve a value previously incremented", async function () {
+        checkSkipTest(this.skipTest, this);
         const proposalDescription = "Proposal #6: change marketplace implementation";
         const changeImplCalldata = this.proxyAdmin.interface.encodeFunctionData("upgrade", [this.dummyImplementation.address, this.dummyImplementationUpgraded.address]);
         await enactProposal(this.luciDaoGovernor, [this.proxyAdmin.address], [0], [changeImplCalldata], proposalDescription, Votes.For);

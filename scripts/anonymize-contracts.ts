@@ -3,6 +3,7 @@ import path from 'path';
 
 const newPrefix = 'Fake';
 const newTokenPrefix = 'FCK';
+const anonymizedContractsPath = '"anonymized-contracts/';
 
 async function copyRecursiveSync(src: string, dest: string) {
     const exists = fs.existsSync(src);
@@ -22,14 +23,11 @@ function replaceContractPrefixInFile(destFilename: string) {
     const data = fs.readFileSync(destFilename, { encoding: 'utf8' });
     let result = data.replace(/Lucidao/g, newPrefix);
     result = result.replace(/LCD/g, newTokenPrefix);
-    fs.writeFileSync(destFilename, result, { encoding: 'utf8' });
-}
+    //anonymized contract path
+    result = result.replace(/"contracts\//g, anonymizedContractsPath);
+    result = result.replace(/contract: `contracts\//g, "contract: `anonymized-contracts\/");
 
-function patchFUsdtInDeployFunctions(destFilename: string) {
-    const data = fs.readFileSync(destFilename, { encoding: 'utf8' });
-    let result = data.replace(/"Frapped USDT"/g, '"' + newPrefix + ' USDT"');
-    result = data.replace(/"fUSDT"/g, '"' + newPrefix + 'USDT"');
-    result = data.replace(/"contracts\//g, '"anonymized-contracts/');
+
     fs.writeFileSync(destFilename, result, { encoding: 'utf8' });
 }
 
@@ -60,16 +58,30 @@ async function anonymizedScriptsManagement(anonymizeScriptContractFolder: string
     const deployFunctionsScripts = path.join(__dirname, '../scripts/deployFunctions.ts');
     const anonymizedDeployFunctionsScripts = path.join(anonymizeScriptContractFolder, 'deployFunctions.ts');
 
+    const redeployFunctionsScripts = path.join(__dirname, '../scripts/redeployLcdOnPolygon.ts');
+    const anonymizedRedeployFunctionsScripts = path.join(anonymizeScriptContractFolder, 'anonymizeRedeployLcdOnPolygon.ts');
+
+    const redeployManagerScript = path.join(__dirname, '../scripts/redeployManager.ts');
+    const anonymizedRedeployManagerScript = path.join(anonymizeScriptContractFolder, 'redeployManager.ts');
+
+    const finalizeScript = path.join(__dirname, '../scripts/finalizeRedeploy.ts');
+    const anonymizedFinalizeScript = path.join(anonymizeScriptContractFolder, 'anonymizeFinalizeRedeploy.ts');
+
     console.log(`Removing scripts from folder: ${anonymizeScriptContractFolder}`);
     fs.rmSync(anonymizeScriptContractFolder, { recursive: true, force: true });
 
     fs.mkdirSync(anonymizeScriptContractFolder);
     fs.copyFileSync(deployEverythingScripts, anonymizedDeployEverythingScripts);
     fs.copyFileSync(deployFunctionsScripts, anonymizedDeployFunctionsScripts);
+    fs.copyFileSync(redeployFunctionsScripts, anonymizedRedeployFunctionsScripts);
+    fs.copyFileSync(redeployManagerScript, anonymizedRedeployManagerScript);
     fs.copyFileSync(utilitiesScripts, utilitiesScriptsInAnonymizedFolder);
+    fs.copyFileSync(finalizeScript, anonymizedFinalizeScript);
     replaceContractPrefixInFile(anonymizedDeployEverythingScripts);
     replaceContractPrefixInFile(anonymizedDeployFunctionsScripts);
-    patchFUsdtInDeployFunctions(anonymizedDeployFunctionsScripts)
+    replaceContractPrefixInFile(anonymizedRedeployFunctionsScripts);
+    replaceContractPrefixInFile(anonymizedRedeployManagerScript);
+    replaceContractPrefixInFile(anonymizedFinalizeScript);
 
     console.log("Built scripts for anonymized contract deploy....!");
 }
@@ -79,7 +91,18 @@ async function anonymizedContractsManagement(contractsFolder: string, anonymizeC
     fs.rmSync(anonymizeContractFolder, { recursive: true, force: true });
 
     await copyRecursiveSync(contractsFolder, anonymizeContractFolder);
-    walk(anonymizeContractFolder).forEach(destFilename => { replaceContractPrefixInFile(destFilename); });
+    // walk(contractsFolder).forEach(sourceFilename => {
+    //     let destFilename = sourceFilename.replace("contracts", "anonymized-contracts").replace("LuciDao", newPrefix);
+    //     let dirName = path.dirname(destFilename);
+    //     if (!fs.existsSync(dirName)) {
+    //         fs.mkdirSync(dirName, { recursive: true });
+    //     }
+    //     fs.copyFileSync(sourceFilename, destFilename);
+    // });
+
+    walk(anonymizeContractFolder).forEach(destFilename => {
+        replaceContractPrefixInFile(destFilename);
+    });
     console.log("Contracts anonymization done....!");
 }
 

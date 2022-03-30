@@ -1,7 +1,7 @@
-import { deployLuciDao } from "./deployFunctions";
+import { getOrDeployLuciDao } from "./deployFunctions";
 
 async function main() {
-    await deployLuciDao();
+    const luciDao = await getOrDeployLuciDao();
 }
 
 main()

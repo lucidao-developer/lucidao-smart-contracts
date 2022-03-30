@@ -1,21 +1,46 @@
 import { Contract } from "@ethersproject/contracts";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { getImplementationAddress } from '@openzeppelin/upgrades-core';
+// import { getManifestAdmin } from '@openzeppelin/hardhat-upgrades/src/admin';
 import { BigNumber } from "ethers";
-import { ethers, run, upgrades } from "hardhat";
-import { fantomMainnetfUsdtAddress, lcdAllocations, preSale, publicSale, releaseTime, timelockMinDelayInSeconds, usdtForLiquidity, usdtToMintForAddress } from "../config/config";
-import { AnyswapV3ERC20, Lucidao, LucidaoGovernanceReserve, LucidaoGovernor, LucidaoPublicSale, LucidaoSale, LucidaoTimelock, LucidaoVestingTreasury } from "../typechain";
-import { GetOpenzeppelinUnknownFile, importModule, isDevelopment, removeOpenzeppelinUnknownFile, skipContractVerify } from './utilities';
+import { ethers, network, run, upgrades } from "hardhat";
+import { CANCELLER_ROLE, EXECUTOR_ROLE, lcdAllocations, luciDaoGovernanceProxy, luciDaoGovernanceReserveAddress, luciDaoTokenAddress, luciDaoVestingTreasuryAddress, luciDaoVisionProposalsAddress, PROPOSER_ROLE, releaseTime, timelockAddress, timelockMinDelayInSeconds, TIMELOCK_ADMIN_ROLE } from "../config/config";
+import { Lucidao, LucidaoGovernanceReserve, LucidaoGovernor, LucidaoTimelock, LucidaoVestingTreasury, LucidaoVisionProposals } from "../typechain";
+import { isStrictMode, readFtmDeployNoncesJson, removeOpenzeppelinUnknownFile, skipContractVerify, testRunningInHardhat } from './utilities';
+import { FeeData } from "@ethersproject/abstract-provider";
+
+const gasFeeArgs = { maxPriorityFeePerGas: 100000000000, maxFeePerGas: 800000000000 };
 
 // *** Lucidao contract ***
-export async function deployLuciDao(): Promise<Lucidao> {
+export async function getDeployedLuciDao(): Promise<Lucidao> {
     const contractName = "Lucidao";
+
+    if (!luciDaoTokenAddress) {
+        throw new Error("Uninitialized LucidaoTokenAddress!")
+    };
+
+    console.log(`\nFound contract ${contractName} implementation at address ${luciDaoTokenAddress}`);
+    return await ethers.getContractAt(contractName, luciDaoTokenAddress);
+}
+
+export async function getOrDeployLuciDao(): Promise<Lucidao> {
+    const contractName = "Lucidao";
+
+    if (luciDaoTokenAddress && !testRunningInHardhat()) {
+        return getDeployedLuciDao();
+    };
+
     console.log(`\nDeploying contract ${contractName}`);
+
+    await checkNonce(contractName);
 
     // DEPLOY LUCIDAO DAO TOKEN
     const LuciDao = await ethers.getContractFactory(contractName);
-    const luciDao = await LuciDao.deploy();
+    const luciDao = await LuciDao.deploy(gasFeeArgs);
     await luciDao.deployed();
     console.log(`${contractName} address: ${luciDao.address}`);
+
+    checkContractAddress(contractName, luciDao.address);
 
     await verifyContract(contractName, { address: luciDao.address });
 
@@ -23,214 +48,223 @@ export async function deployLuciDao(): Promise<Lucidao> {
 }
 
 // *** Timelock Governance ***
-export async function deployLuciDaoTimelock(): Promise<LucidaoTimelock> {
+export async function getOrDeployLuciDaoTimelock(): Promise<LucidaoTimelock> {
     const contractName = "LucidaoTimelock";
+
+    if (timelockAddress && !testRunningInHardhat()) {
+        console.log(`\nFound contract ${contractName} implementation at address ${timelockAddress}`);
+        return await ethers.getContractAt(contractName, timelockAddress);
+    };
+
     console.log(`\nDeploying contract ${contractName}`);
+
+    await checkNonce(contractName);
 
     // DEPLOY LUCIDAO TIMELOCK
     const LuciDaoTimelock = await ethers.getContractFactory(contractName);
-    const luciDaoTimelock = await LuciDaoTimelock.deploy(timelockMinDelayInSeconds, [], []);
+    const luciDaoTimelock = await LuciDaoTimelock.deploy(timelockMinDelayInSeconds, [], [], gasFeeArgs);
     await luciDaoTimelock.deployed();
     console.log(`${contractName} address: ${luciDaoTimelock.address}`);
 
-    await verifyContract(contractName, { address: luciDaoTimelock.address, contract: "contracts/LuciDaoTimelock.sol:LucidaoTimelock", constructorArguments: [timelockMinDelayInSeconds, [], []] });
+    checkContractAddress(contractName, luciDaoTimelock.address);
+
+    await verifyContract(contractName, {
+        address: luciDaoTimelock.address,
+        contract: `contracts/LuciDaoTimelock.sol:${contractName}`,
+        constructorArguments: [timelockMinDelayInSeconds, [], []]
+    });
 
     return luciDaoTimelock;
 }
 
 // *** Proxied Governance ***
-export async function deployProxiedGovernance(deployer: SignerWithAddress, luciDao: Lucidao, luciDaoTimelock: LucidaoTimelock) {
-    const chainId = await deployer.getChainId();
-    removeOpenzeppelinUnknownFile(chainId);
-
+export async function getOrDeployProxiedGovernance(deployer: SignerWithAddress, luciDao: Lucidao, luciDaoTimelock: LucidaoTimelock) {
     const contractName = "LucidaoGovernor";
+
+    if (luciDaoGovernanceProxy && !testRunningInHardhat()) {
+        console.log(`\nFound contract ${contractName} implementation at address ${luciDaoGovernanceProxy}`);
+        const luciDaoGovernor = await ethers.getContractAt(contractName, luciDaoGovernanceProxy);
+        return luciDaoGovernor;
+    };
+
+    await checkNonce(contractName);
+
     console.log(`\nDeploying contract ${contractName}`);
+    const chainId = await deployer.getChainId();
+    if (testRunningInHardhat()) {
+        removeOpenzeppelinUnknownFile(chainId);
+    };
+
+    let signer = ethers.Wallet.fromMnemonic(process.env.MNEMONIC).connect(deployer.provider!);;
+
+    if (!testRunningInHardhat()) {
+        //https://github.com/OpenZeppelin/openzeppelin-upgrades/issues/85#issuecomment-1028435049
+        const FEE_DATA: FeeData = {
+            maxFeePerGas: ethers.utils.parseUnits('801', 'gwei'),
+            maxPriorityFeePerGas: ethers.utils.parseUnits('101', 'gwei'),
+            gasPrice: null
+        };
+
+        const provider = new ethers.providers.FallbackProvider([ethers.provider], 1);
+        provider.getFeeData = async () => FEE_DATA;
+
+        signer = ethers.Wallet.fromMnemonic(process.env.MNEMONIC).connect(provider);
+    }
 
     // DEPLOY PROXIED GOVERNANCE
     const contractArgs = [luciDao.address, luciDaoTimelock.address];
-    const LuciDaoGovernor = await ethers.getContractFactory(contractName);
-    const luciDaoGovernor = await upgrades.deployProxy(LuciDaoGovernor, contractArgs) as LucidaoGovernor;
+    const LuciDaoGovernor = await ethers.getContractFactory(contractName, signer);
+    const luciDaoGovernor = await upgrades.deployProxy(LuciDaoGovernor, contractArgs, { timeout: 0 }) as LucidaoGovernor;
     await luciDaoGovernor.deployed();
     console.log(`${contractName} address: ${luciDaoGovernor.address}`);
 
-    const PROPOSER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("PROPOSER_ROLE"));
-    const EXECUTOR_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("EXECUTOR_ROLE"));
-    const TIMELOCK_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("TIMELOCK_ADMIN_ROLE"));
-    await (await luciDaoTimelock.grantRole(PROPOSER_ROLE, luciDaoGovernor.address)).wait();
-    await (await luciDaoTimelock.grantRole(EXECUTOR_ROLE, ethers.constants.AddressZero)).wait();
-    await (await luciDaoTimelock.grantRole(TIMELOCK_ADMIN_ROLE, luciDaoGovernor.address)).wait();
-    await (await luciDaoTimelock.renounceRole(TIMELOCK_ADMIN_ROLE, deployer.address)).wait();
-    console.log("Timelock roles renounced and given to governance");
+    checkContractAddress(contractName, await getImplementationAddress(network.provider, luciDaoGovernor.address));
+    checkContractAddress("Proxy", luciDaoGovernor.address);
+
+    await checkNonce("grantRoleTimelock1");
+    await (await luciDaoTimelock.grantRole(PROPOSER_ROLE, luciDaoGovernor.address, gasFeeArgs)).wait();
+    await checkNonce("grantRoleTimelock2");
+    await (await luciDaoTimelock.grantRole(EXECUTOR_ROLE, ethers.constants.AddressZero, gasFeeArgs)).wait();
+    await checkNonce("grantRoleTimelock3");
+    await (await luciDaoTimelock.grantRole(TIMELOCK_ADMIN_ROLE, luciDaoGovernor.address, gasFeeArgs)).wait();
+    await checkNonce("grantRoleTimelock4");
+    await (await luciDaoTimelock.grantRole(CANCELLER_ROLE, luciDaoGovernor.address, gasFeeArgs)).wait();
+
+    if (testRunningInHardhat()) {
+        await renounceTimelockAdminRole(deployer, luciDaoTimelock);
+    }
 
     // await upgrades.admin.changeProxyAdmin(lucidGovernor.address, lucidTimelock.address);
-    await upgrades.admin.transferProxyAdminOwnership(luciDaoTimelock.address);
+    // await upgrades.admin.transferProxyAdminOwnership(luciDaoTimelock.address);
+    await checkNonce("transferOwnershipProxyAdmin");
+    const contract = await upgrades.admin.getInstance();
+    await (await contract.transferOwnership(luciDaoTimelock.address, gasFeeArgs)).wait();
+    let actualProxyAdmin = await contract.owner();
+    if (actualProxyAdmin != luciDaoTimelock.address) {
+        console.error(`Error changing Ownership of proxy admin to lucidaoTimelock - LucidaoTimelock ${luciDaoTimelock.address} - Proxy Admin: ${actualProxyAdmin}`)
+    }
+
     console.log("ProxyAdmin ownership given to timelock");
 
-    await verifyGovernanceImplementation(deployer, contractName);
+    //const contractParameter = `contracts/${contractName}.sol:${contractName}`;
+    await verifyGovernanceImplementation(contractName, luciDaoGovernor);
 
     return luciDaoGovernor;
 }
 
 // *** Proxied Governance ***
-async function verifyGovernanceImplementation(deployer: SignerWithAddress, contractName: string) {
+export async function renounceTimelockAdminRole(deployer: SignerWithAddress, luciDaoTimelock: LucidaoTimelock) {
+    await (await luciDaoTimelock.renounceRole(TIMELOCK_ADMIN_ROLE, deployer.address, gasFeeArgs)).wait();
+    console.log("Timelock roles renounced for deployer address");
+}
+
+// *** Proxied Governance ***
+async function verifyGovernanceImplementation(contractName: string, contract: Contract) {
     try {
-        const chainId = await deployer.getChainId();
-        const moduleName = GetOpenzeppelinUnknownFile(chainId);
-        console.log(`Reading proxy governance contract json: ${moduleName}`);
-        const mod = await importModule(moduleName);
-        const targetKey = Object.keys(mod.impls)[0];
-        const lucidGovernorImplAddress = mod.impls[targetKey].address;
+        const lucidGovernorImplAddress = await getImplementationAddress(network.provider, contract.address);
         console.log(`Found governance implementation in proxy governance json. Address: ${lucidGovernorImplAddress}`);
-        await verifyContract(contractName, { address: lucidGovernorImplAddress, /*constructorArguments: contractArgs*/ });
+        await verifyContract(contractName,
+            {
+                address: lucidGovernorImplAddress,
+                /*contract: contractParameter
+                constructorArguments: contractArgs*/
+            });
     } catch (error) {
         console.log(`Warning: problem while verifying governance contract. Skip! Error detail: ${error}`);
     }
 }
 
 // *** Governance Reserve ***
-export async function deployLuciDaoGovernanceReserve(liquidityVaultAddress: string, luciDao: Lucidao, liquidityToken: AnyswapV3ERC20, luciDaoTimelock: Contract): Promise<LucidaoGovernanceReserve> {
+export async function getOrDeployLuciDaoGovernanceReserve(luciDao: Lucidao, luciDaoTimelock: Contract): Promise<LucidaoGovernanceReserve> {
     const contractName = "LucidaoGovernanceReserve";
+
+    if (luciDaoGovernanceReserveAddress && !testRunningInHardhat()) {
+        console.log(`\nFound contract ${contractName} implementation at address ${luciDaoGovernanceReserveAddress}`);
+        return await ethers.getContractAt(contractName, luciDaoGovernanceReserveAddress);
+    };
+
     console.log(`\nDeploying contract ${contractName}`);
-    console.log(`Liquidity Vault Address ${liquidityVaultAddress}`);
+
+    await checkNonce(contractName);
 
     // DEPLOY GOVERNANCE RESERVE
-    const contractArgs = [liquidityToken.address, liquidityVaultAddress, usdtForLiquidity] as const;
     const LuciDaoGovernanceReserve = await ethers.getContractFactory(contractName);
-    const luciDaoGovernanceReserve = await LuciDaoGovernanceReserve.deploy(...contractArgs);
+    const luciDaoGovernanceReserve = await LuciDaoGovernanceReserve.deploy(gasFeeArgs);
     await luciDaoGovernanceReserve.deployed();
     console.log(`${contractName} address: ${luciDaoGovernanceReserve.address}`);
 
-    await (await luciDaoGovernanceReserve.transferOwnership(luciDaoTimelock.address)).wait();
-    console.log(`${contractName} ownership given to timelock of governance ${luciDaoTimelock.address}`);
+    checkContractAddress(contractName, luciDaoGovernanceReserve.address);
 
-    await transferLuciDaoTo(luciDao, contractName, luciDaoGovernanceReserve.address, lcdAllocations.governanceReserve);
+    if (testRunningInHardhat()) {
+        await (await luciDaoGovernanceReserve.transferOwnership(luciDaoTimelock.address)).wait();
+        console.log(`${contractName} ownership given to timelock of governance ${luciDaoTimelock.address}`);
+        await transferLuciDaoTo(luciDao, contractName, luciDaoGovernanceReserve.address, lcdAllocations.governanceReserve);
+    }
 
-    await verifyContract(contractName, { address: luciDaoGovernanceReserve.address, constructorArguments: contractArgs });
+    await verifyContract(contractName, { address: luciDaoGovernanceReserve.address });
 
     return luciDaoGovernanceReserve;
 }
 
-// *** Vesting Treasury ***
-export async function deployLuciDaoVestingTreasury(luciDao: Lucidao, luciDaoGovernanceReserve: LucidaoGovernanceReserve): Promise<LucidaoVestingTreasury> {
-    const contractName = "LucidaoVestingTreasury";
+export async function getOrDeployLuciDaoVisionProposals(luciDaoTimelock: Contract): Promise<LucidaoVisionProposals> {
+    const contractName = "LucidaoVisionProposals";
+
+    if (luciDaoVisionProposalsAddress && !testRunningInHardhat()) {
+        console.log(`\nFound contract ${contractName} implementation at address ${luciDaoVisionProposalsAddress}`);
+        return await ethers.getContractAt(contractName, luciDaoVisionProposalsAddress);
+    };
+
     console.log(`\nDeploying contract ${contractName}`);
+
+    await checkNonce(contractName);
+
+    // DEPLOY VISION PROPOSALS CONTAINER
+    const LuciDaoVisionProposals = await ethers.getContractFactory(contractName);
+    const luciDaoVisionProposals = await LuciDaoVisionProposals.deploy(gasFeeArgs);
+    await luciDaoVisionProposals.deployed();
+    console.log(`${contractName} address: ${luciDaoVisionProposals.address}`);
+
+    await checkNonce("transferOwnershipLucidaoVisionProposals");
+    await (await luciDaoVisionProposals.transferOwnership(luciDaoTimelock.address, gasFeeArgs)).wait();
+    console.log(`${contractName} ownership given to timelock of governance ${luciDaoTimelock.address}`);
+
+    await verifyContract(contractName, { address: luciDaoVisionProposals.address });
+
+    return luciDaoVisionProposals;
+}
+
+// *** Vesting Treasury ***
+export async function getOrDeployLuciDaoVestingTreasury(luciDao: Lucidao, luciDaoGovernanceReserve: LucidaoGovernanceReserve): Promise<LucidaoVestingTreasury> {
+    const contractName = "LucidaoVestingTreasury";
+
+    if (luciDaoVestingTreasuryAddress && !testRunningInHardhat()) {
+        console.log(`\nFound contract ${contractName} implementation at address ${luciDaoVestingTreasuryAddress}`);
+        const luciDaoVestingTreasury = await ethers.getContractAt(contractName, luciDaoVestingTreasuryAddress);
+        return luciDaoVestingTreasury;
+    };
+
+    console.log(`\nDeploying contract ${contractName}`);
+
+    await checkNonce(contractName);
 
     // DEPLOY VESTING TREASURY
     const LuciDaoVestingTreasury = await ethers.getContractFactory(contractName);
     const contractArgs = [luciDao.address, luciDaoGovernanceReserve.address, releaseTime] as const;
-    const luciDaoVestingTreasury = await LuciDaoVestingTreasury.deploy(...contractArgs);
+    const luciDaoVestingTreasury = await LuciDaoVestingTreasury.deploy(...contractArgs, gasFeeArgs);
     await luciDaoVestingTreasury.deployed();
     console.log(`${contractName} address ${luciDaoVestingTreasury.address}`);
 
+    checkContractAddress(contractName, luciDaoVestingTreasury.address);
+
     await transferLuciDaoTo(luciDao, contractName, luciDaoVestingTreasury.address, lcdAllocations.vestingTreasury);
 
-    await verifyContract(contractName, { address: luciDaoVestingTreasury.address, contract: "contracts/LuciDaoVestingTreasury.sol:LucidaoVestingTreasury", constructorArguments: contractArgs });
+    await verifyContract(contractName, {
+        address: luciDaoVestingTreasury.address,
+        contract: "contracts/LuciDaoVestingTreasury.sol:LucidaoVestingTreasury",
+        constructorArguments: contractArgs
+    });
 
     return luciDaoVestingTreasury;
-}
-
-// *** fUSDT contract ***
-export async function getOrDeployfUsdt(vault: SignerWithAddress, whitelistedAddresses?: string[]): Promise<AnyswapV3ERC20> {
-    if (!isDevelopment()) {
-        console.log(`\nRetrieving Fantom MainNet FUSDT at address ${fantomMainnetfUsdtAddress}`);
-        return await ethers.getContractAt("AnyswapV3ERC20", fantomMainnetfUsdtAddress);
-    };
-
-    const contractName = "AnyswapV3ERC20";
-    console.log(`\nDeploying contract ${contractName}`);
-
-    // DEPLOY fUSDT
-    const Fusdt = await ethers.getContractFactory(contractName);
-    const fusdt = await Fusdt.deploy("Frapped USDT", "fUSDT", 6, ethers.constants.AddressZero, vault.address);
-    await fusdt.deployed();
-    console.log(`${contractName} address ${fusdt.address}`);
-
-    if (whitelistedAddresses?.length) {
-        for (let index = 0; index < whitelistedAddresses.length; index++) {
-            const address = whitelistedAddresses[index];
-            await mintfUsdtTo(fusdt, address, usdtToMintForAddress);
-        }
-    }
-
-    //await verifyContract(contractName, { address: fusdt.address });
-
-    return fusdt;
-}
-
-// *** Lucidao sale contracts ***
-export async function deploySaleContracts(luciDao: Lucidao, luciDaoGovernanceReserve: LucidaoGovernanceReserve, liquidityToken: AnyswapV3ERC20, whitelisted: string[]): Promise<[LucidaoSale, LucidaoPublicSale]> {
-    const preSaleContract = await deployPreSaleContract(luciDao, luciDaoGovernanceReserve, liquidityToken, whitelisted);
-    const publicSaleContract = await deployPublicSaleContract(luciDao, luciDaoGovernanceReserve, liquidityToken);
-    return [preSaleContract, publicSaleContract];
-
-    // // ADD LIQUIDITY TO SUSHI
-    // const Factory = await ethers.getContractFactory("Factory");
-    // const factory = await Factory.attach("0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc");
-    // const Router = await ethers.getContractFactory("Router");
-    // const router = await Router.attach("0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3");
-
-    // await factory.createPair(liquidityToken.address, lucid.address);
-    // await liquidityToken.approve(router.address, ethers.utils.parseUnits("0.05"));
-    // await lucid.approve(router.address, ethers.utils.parseUnits("1"));
-    // // 20 LCD per USDT
-    // await router.addLiquidity(liquidityToken.address, lucid.address, ethers.utils.parseUnits("0.05"), ethers.utils.parseUnits("0.05"), ethers.utils.parseUnits("1"), ethers.utils.parseUnits("1"), receiver, Math.round((new Date().getTime() + (60 * 10)) / 1000));
-
-}
-
-async function deployPreSaleContract(luciDao: Lucidao, luciDaoGovernanceReserve: LucidaoGovernanceReserve, liquidityToken: AnyswapV3ERC20, whitelisted: string[]): Promise<LucidaoSale> {
-    const contractName = "LucidaoSale";
-    console.log(`\nDeploying contract ${contractName}`);
-
-    // DEPLOY PRESALE CONTRACT
-    const saleArgs: [BigNumber, BigNumber, string, string, string, number, number, BigNumber, string[]] = [
-        ethers.utils.parseUnits(preSale.rate, 12),
-        ethers.utils.parseUnits(preSale.maxAmountSpendable, 6),
-        luciDaoGovernanceReserve.address,
-        luciDao.address,
-        liquidityToken.address,
-        preSale.startTime,
-        preSale.endTime,
-        ethers.utils.parseUnits(lcdAllocations.preSale),
-        whitelisted
-    ];
-
-    const LuciDaoInitialSale = await ethers.getContractFactory(contractName);
-    const luciDaoInitialSale = await LuciDaoInitialSale.deploy(...saleArgs);
-    await luciDaoInitialSale.deployed();
-    console.log(`${contractName}Initial address: ${luciDaoInitialSale.address}`);
-
-    await transferLuciDaoTo(luciDao, contractName, luciDaoInitialSale.address, lcdAllocations.preSale);
-
-    await verifyContract(contractName, { address: luciDaoInitialSale.address, constructorArguments: saleArgs });
-
-    return luciDaoInitialSale;
-}
-
-async function deployPublicSaleContract(luciDao: Lucidao, luciDaoGovernanceReserve: LucidaoGovernanceReserve, liquidityToken: AnyswapV3ERC20): Promise<LucidaoPublicSale> {
-    const contractName = "LucidaoPublicSale";
-    console.log(`\nDeploying contract ${contractName}`);
-
-    // DEPLOY PUBLIC SALE CONTRACT
-    const publicSaleArgs = [
-        ethers.utils.parseUnits(publicSale.rate, 12),
-        ethers.utils.parseUnits(publicSale.maxAmountSpendable, 6),
-        luciDaoGovernanceReserve.address,
-        luciDao.address,
-        liquidityToken.address,
-        publicSale.startTime,
-        publicSale.endTime,
-        ethers.utils.parseUnits(lcdAllocations.publicSale)
-    ] as const;
-    const LuciDaoPublicSale = await ethers.getContractFactory(contractName);
-    const luciDaoPublicSale = await LuciDaoPublicSale.deploy(...publicSaleArgs);
-    await luciDaoPublicSale.deployed();
-    console.log(`${contractName} address: ${luciDaoPublicSale.address}`);
-
-    await transferLuciDaoTo(luciDao, contractName, luciDaoPublicSale.address, lcdAllocations.publicSale);
-
-    await verifyContract(contractName, { address: luciDaoPublicSale.address, constructorArguments: publicSaleArgs });
-
-    return luciDaoPublicSale;
 }
 
 // *** Verify contract ***
@@ -239,7 +273,7 @@ export async function verifyContract(name: string, taskArguments?: any) {
         return;
     }
     console.log(`Verifying contract ${name}`);
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise(r => setTimeout(r, 90000));
 
     try {
         await run("verify:verify", taskArguments);
@@ -249,27 +283,45 @@ export async function verifyContract(name: string, taskArguments?: any) {
     }
 }
 
-// *** Transfer functions ***
-export async function transferLuciDaoToLiquidityVault(luciDao: Lucidao, liquidityVaultAddress: string) {
-    //FIXME: set final liquidity vault address in config
-
-    await transferLuciDaoTo(luciDao, "LiquidityVault", liquidityVaultAddress, lcdAllocations.liquidityVault);
-}
-
-async function transferLuciDaoTo(luciDao: Lucidao, contractName: string, contractAddress: string, qty: string) {
-    await (await luciDao.transfer(contractAddress, ethers.utils.parseUnits(qty))).wait();
+// *** Transfer LCD ***
+export async function transferLuciDaoTo(luciDao: Lucidao, contractName: string, contractAddress: string, qty: string) {
+    await (await luciDao.transfer(contractAddress, ethers.utils.parseUnits(qty), gasFeeArgs)).wait();
     console.log(`${contractName}: transferred ${qty.toString()} Lucidao to ${contractAddress}`);
 }
 
-export async function mintfUsdtTo(fUsdt: AnyswapV3ERC20, address: string, qty: string) {
-    await (await fUsdt.mint(address, ethers.utils.parseUnits(qty, 6))).wait();
-    console.log(`Transferred ${qty.toString()} fUSDT to ${address}`);
+export async function transferLuciDaoUnitsTo(luciDao: Lucidao, contractName: string, contractAddress: string, qty: BigNumber) {
+    await (await luciDao.transfer(contractAddress, qty, gasFeeArgs)).wait();
+    console.log(`${contractName}: transferred ${qty.toString()} Lucidao units to ${contractAddress}`);
 }
 
-export async function addToPublicSaleWhitelist(luciDaoPublicSale: LucidaoPublicSale, whitelistedAddresses: string[]) {
-    for (let index = 0; index < whitelistedAddresses.length; index++) {
-        const address = whitelistedAddresses[index];
-        await (await luciDaoPublicSale.addToWhitelist(address)).wait();
-        console.log(await luciDaoPublicSale.isWhitelisted(address) ? `${address} has been whitelisted for public sale` : `ERROR: ${address} has not been whitelisted`);
+// *** Nonce managing ***
+async function checkNonce(txName: string) {
+    if (!isStrictMode()) return;
+
+    const [deployer] = await ethers.getSigners();
+    const currentNonce = await deployer.getTransactionCount();
+    const tx = readFtmDeployNoncesJson(txName);
+    if (+tx.nonce !== currentNonce) throw new Error(`On tx named ${txName} the current nonce (${currentNonce}) and deploy nonce (${tx.nonce}) don't match`);
+}
+
+function checkContractAddress(txName: string, currentContractAddress: string) {
+    if (!isStrictMode()) return;
+
+    const tx = readFtmDeployNoncesJson(txName);
+    if (tx.address !== currentContractAddress) throw new Error(`On tx named ${txName} the current address (${currentContractAddress}) and deploy address (${tx.address}) don't match`);
+}
+
+export async function transferOwnershipForGovernanceReserve(deployer: SignerWithAddress, governanceReserve: LucidaoGovernanceReserve, luciDao: Lucidao, timelock: LucidaoTimelock) {
+    if (await governanceReserve.owner() != deployer.address) {
+        throw new Error("Governance Reserve has an unexpected owner!")
     }
+
+    const lucidaoBalance = await luciDao.balanceOf(governanceReserve.address);
+
+    // if (!lucidaoBalance.eq(ethers.utils.parseEther(lcdAllocations.governanceReserveAfterInstitutionalSale))) {
+    //     throw new Error("Governance Reserve has an unexpected balance!")
+    // }
+
+    await (await governanceReserve.transferOwnership(timelock.address)).wait();
+    console.log(`GovernanceReserve ownership given to timelock of governance ${timelock.address}`);
 }

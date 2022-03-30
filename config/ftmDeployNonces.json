@@ -1,0 +1,51 @@
+{
+    "Lucidao": {
+        "nonce": "0",
+        "address": "0xc2A45FE7d40bCAc8369371B08419DDAFd3131b4a"
+    },
+    "LucidaoTimelock": {
+        "nonce": "1",
+        "address": "0x2fD88B3dc1D7793dD62e359B6D6489F0ede68938"
+    },
+    "LucidaoGovernor": {
+        "nonce": "2",
+        "address": "0x08ee351B93bdCFECf0e4795E9ebF39aC4781AE03"
+    },
+    "deployProxyAdmin": {
+        "nonce": "3",
+        "address": "0xD2FfC695981Fc314DFDf6ED3D20Ad634946AbFDC"
+    },
+    "Proxy": {
+        "nonce": "4",
+        "address": "0xac1fdCA2Be645E3e06c7832613a78C72135DA945"
+    },
+    "grantRoleTimelock1": {
+        "nonce": "5"
+    },
+    "grantRoleTimelock2": {
+        "nonce": "6"
+    },
+    "grantRoleTimelock3": {
+        "nonce": "7"
+    },
+    "grantRoleTimelock4": {
+        "nonce": "8"
+    },
+    "transferOwnershipProxyAdmin": {
+        "nonce": "9"
+    },
+    "LucidaoGovernanceReserve": {
+        "nonce": "10",
+        "address": "0x881d440A7e047335BE81BBB27dBA6AEe9c2aa529"
+    },
+    "LucidaoVisionProposals": {
+        "nonce": "11"
+    },
+    "transferOwnershipLucidaoVisionProposals": {
+        "nonce": "12"
+    },
+    "LucidaoVestingTreasury": {
+        "nonce": "13",
+        "address": "0x3Ade8146e3c6Ec5275F768cB93EEac78363Ceb10"
+    }
+}

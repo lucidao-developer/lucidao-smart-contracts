@@ -7,6 +7,7 @@ coverage.json
 typechain
 .openzeppelin
 tests.txt
+tmpopenzeppelin
 
 #Hardhat files
 cache
@@ -14,6 +15,7 @@ artifacts
 bin
 
 #VsCode
+.vscode
 .history
 .devcontainer
 devcontainer.json
