@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { ethers, waffle } from 'hardhat';
+import { ethers } from 'hardhat';
 import { lcdAllocations } from '../config/config';
 import { transferLuciDaoTo, transferOwnershipForGovernanceReserve } from '../scripts/deployFunctions';
 import { checkSkipTest } from './Utilities';
@@ -12,7 +12,7 @@ export function luciDaoGovernanceReserveBehavior(): void {
 
   it("Governance reserve can receive native token", async function () {
     checkSkipTest(this.skipTest, this);
-    const provider = waffle.provider;
+    const provider = ethers.provider;
     const nativeTokenAmount = "100";
     const parsedEthAmount = ethers.utils.parseEther(nativeTokenAmount);
 

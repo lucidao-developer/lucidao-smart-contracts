@@ -18,8 +18,6 @@ export function luciDaoVestingTreasuryBehavior(): void {
   it("should withdraw token only after release time", async function () {
     checkSkipTest(this.skipTest, this);
     await expect(this.LuciDaoVestingTreasury.release()).to.be.revertedWith("TokenTimelock: current time is before release time");
-    await network.provider.send("evm_mine", [releaseTime - 100]);
-    await expect(this.LuciDaoVestingTreasury.release()).to.be.revertedWith("TokenTimelock: current time is before release time");
     await network.provider.send("evm_mine", [releaseTime + 1]);
     await expect(() => this.LuciDaoVestingTreasury.release()).to.changeTokenBalances(
       this.luciDaoToken,

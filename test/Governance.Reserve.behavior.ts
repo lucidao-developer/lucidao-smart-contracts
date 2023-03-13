@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers, network, waffle } from "hardhat";
+import { ethers, network } from "hardhat";
 import { Votes } from "../config/config";
 import { ProposalArgs } from "../types/mochaContextAugmentations";
 import { checkSkipTest, enactProposal, voteProposal } from "./Utilities";
@@ -30,7 +30,7 @@ export function governanceReserveBehavior(): void {
 
     it("Can transfer native token from governance", async function () {
         checkSkipTest(this.skipTest, this);
-        const provider = waffle.provider;
+        const provider = ethers.provider;
         const nativeTokenAmount = "1000";
         const parsedEthAmount = ethers.utils.parseEther(nativeTokenAmount);
 

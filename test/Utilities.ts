@@ -17,16 +17,13 @@ export async function voteProposal(governor: LucidaoGovernor, targets: string[],
     const tx = await governor.propose(targets, values, calldatas, description);
     const txReceipt = await tx.wait();
     const proposalId = (txReceipt.events![0].args!["proposalId"]).toString();
-    const votingDelay = await governor.votingDelay();
-    for (let index = 0; index <= votingDelay.toNumber(); index++) {
-        await network.provider.send("evm_mine");
-    }
+    const votingDelay = removeLeadingZero((await governor.votingDelay()).toHexString());
+    await network.provider.send("hardhat_mine", [votingDelay]);
     await governor.castVote(proposalId, vote);
     const proposalDeadline = await governor.proposalDeadline(proposalId);
     const currentBlock = await ethers.provider.getBlockNumber();
-    for (let index = currentBlock; index <= proposalDeadline.toNumber(); index++) {
-        await network.provider.send("evm_mine");
-    }
+    const missingBlock = removeLeadingZero(proposalDeadline.sub(currentBlock).toHexString());
+    await network.provider.send("hardhat_mine", [missingBlock]);
 
     return proposalId;
 }
@@ -36,8 +33,8 @@ export async function enactProposal(governor: LucidaoGovernor, targets: string[]
     const proposalArgs = [targets, values, calldatas] as ProposalArgs;
     const proposalId = await voteProposal(governor, ...proposalArgs, description, vote);
     await governor.queue(...proposalArgs, descriptionHash);
-    const proposalEta = await governor.proposalEta(proposalId);
-    await network.provider.send("evm_mine", [proposalEta.toNumber()]);
+    const delay = removeLeadingZero((await governor.proposalDeadline(proposalId)).toHexString());
+    await network.provider.send("hardhat_mine", [delay]);
     await governor.execute(...proposalArgs, descriptionHash);
 }
 
@@ -64,7 +61,7 @@ export async function initGovernanceScenario(context: Context, proposalDescripti
     context.descriptionHash = ethers.utils.id(proposalDescription);
     context.approveCalldata = context.luciDaoGovernanceReserve.interface.encodeFunctionData("approveToken", [context.luciDaoToken.address, context.grantAmount, context.luciDaoTimelock.address]);
     context.transferCalldata = context.luciDaoToken.interface.encodeFunctionData("transferFrom", [context.luciDaoGovernanceReserve.address, context.white3.address, context.grantAmount]);
-    context.changeQuorumCalldata = context.luciDaoGovernor.interface.encodeFunctionData("updateQuorumNumerator", [context.newQuorum]);
+
     context.proposalArgs = [[context.luciDaoGovernanceReserve.address, context.luciDaoToken.address], [0, 0], [context.approveCalldata, context.transferCalldata]];
     context.proposal = [...context.proposalArgs, proposalDescription];
     context.queueId = await context.luciDaoTimelock.hashOperationBatch(...context.proposalArgs, ethers.constants.HashZero, context.descriptionHash);
@@ -80,7 +77,8 @@ export async function delegateAndPropose(context: Context) {
 
 export async function enactNewQuorumProposal(context: Context) {
     const proposalDescription = "Proposal #4: change quorum requirement";
-    const proposalArgs = [[context.luciDaoGovernor.address], [0], [context.changeQuorumCalldata]] as ProposalArgs;
+    const changeQuorumCalldata = context.luciDaoGovernor.interface.encodeFunctionData("updateQuorumNumerator", [context.newQuorum]);
+    const proposalArgs = [[context.luciDaoGovernor.address], [0], [changeQuorumCalldata]] as ProposalArgs;
     await enactProposal(context.luciDaoGovernor, ...proposalArgs, proposalDescription, Votes.For);
 }
 
@@ -91,9 +89,9 @@ export async function enactNewVotingDelayAndQuorumProposal(context: Context, new
     const changeQuorumCalldata = context.luciDaoGovernor.interface.encodeFunctionData("updateQuorumNumerator",
         [newQuorum]);
     const proposalArgs = [[context.luciDaoGovernor.address, context.luciDaoGovernor.address],
-                          [0, 0],
-                          [changeVotingDelayCalldata, changeQuorumCalldata]
-                        ] as ProposalArgs;
+    [0, 0],
+    [changeVotingDelayCalldata, changeQuorumCalldata]
+    ] as ProposalArgs;
     await enactProposal(context.luciDaoGovernor, ...proposalArgs, proposalDescription, Votes.For);
 }
 
@@ -120,4 +118,16 @@ export async function restoreSnapshot(network: Network, snapshot: Uint8Array | u
     if (testRunningInHardhat()) {
         await network.provider.send("evm_revert", [snapshot]);
     }
+}
+
+export function removeLeadingZero(string: string): string {
+    let i = 0;
+    if (string.startsWith("0x")) {
+        i = 2
+    }
+    while (string[i] === "0") {
+        string = string.slice(0, i) + string.slice(i + 1)
+        i++
+    }
+    return string;
 }

@@ -60,18 +60,12 @@ export const airdropManagerAddress = process.env.airdropManagerAddress;
 export const luciDaoLiquidityAddress = process.env.luciDaoLiquidityAddress;
 
 // Contract parameters
-export const releaseTime = 1673704800;
+export const releaseTime = Math.floor(Date.now() / 1000 + 100);
 
 //On Polygon: avg block time 2.19s
 let votingDelay = "19726"; //12H
 let votingPeriod = "118356"; //3gg
 let timelockDelay = 14400;  // 4 hours
-
-if (isDevelopment()) {
-    votingDelay = "333";
-    votingPeriod = "2000";
-    timelockDelay = 60;
-}
 
 export const timelockMinDelayInSeconds = timelockDelay;
 

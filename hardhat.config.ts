@@ -1,10 +1,11 @@
 import { HardhatUserConfig, task } from "hardhat/config";
 import "@nomiclabs/hardhat-etherscan";
-import "@nomiclabs/hardhat-waffle";
+import "@nomicfoundation/hardhat-toolbox";
 import "@typechain/hardhat";
 import "@openzeppelin/hardhat-upgrades";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
+import "@nomicfoundation/hardhat-chai-matchers";
 import { isDevelopment, myDotenvConfig, usingAnonymizedScriptsAndContracts } from "./scripts/utilities";
 
 myDotenvConfig();

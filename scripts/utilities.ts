@@ -56,7 +56,7 @@ export function removeOpenzeppelinUnknownFile(chainId: number) {
 
 export function throwIfNot<T, K extends keyof T>(obj: Partial<T>, prop: K, msg?: string): T[K] {
     if (obj[prop] === undefined || obj[prop] === null) {
-        throw new Error(msg || `Environment is missing variable ${prop}`)
+        throw new Error(msg || `Environment is missing variable ${String(prop)}`)
     } else {
         return obj[prop] as T[K]
     }

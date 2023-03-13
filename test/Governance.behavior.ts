@@ -1,7 +1,8 @@
 import { expect } from 'chai';
 import { ethers } from 'hardhat';
-import { governance } from '../config/config';
-import { checkSkipTest } from './Utilities';
+import { Votes, governance } from '../config/config';
+import { checkSkipTest, enactProposal } from './Utilities';
+import { ProposalArgs } from '../types/mochaContextAugmentations';
 
 export function governanceBehavior(): void {
     it("should have expected init parameters", async function () {

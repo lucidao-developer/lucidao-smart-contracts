@@ -5,7 +5,7 @@ import { checkSkipTest, enactProposal } from "../test/Utilities";
 export function governanceProxyBehavior(): void {
     it("should not allow changing governance implementation without a governance operation", async function () {
         checkSkipTest(this.skipTest, this);
-        await expect(this.transparentUpgradeableProxy.upgradeTo(this.luciDaoGovernorUpgraded.address)).to.be.revertedWith("function selector was not recognized and there's no fallback function");
+        await expect(this.transparentUpgradeableProxy.upgradeTo(this.luciDaoGovernorUpgraded.address)).to.be.revertedWithoutReason();
     });
 
     it("should allow changing governance implementation with a governance operation", async function () {
