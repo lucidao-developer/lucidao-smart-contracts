@@ -11,3 +11,4 @@ contract LucidaoVestingTreasury is TokenTimelock {
     uint256 releaseTime_
   ) TokenTimelock(token_, beneficiary_, releaseTime_) {}
 }
+

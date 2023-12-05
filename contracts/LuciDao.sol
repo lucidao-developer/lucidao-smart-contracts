@@ -33,3 +33,4 @@ contract Lucidao is ERC20Votes {
     super._burn(account, amount);
   }
 }
+

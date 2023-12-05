@@ -34,3 +34,4 @@ contract LucidaoGovernanceReserve is Ownable {
 		emit Received(msg.sender, msg.value);
 	}
 }
+

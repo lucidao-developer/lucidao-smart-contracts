@@ -11,3 +11,4 @@ contract LucidaoTimelock is TimelockController {
 		address[] memory executors
 	) TimelockController(minDelay, proposers, executors) {}
 }
+
